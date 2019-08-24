@@ -1,113 +1,104 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import Phaser from 'phaser';
+import { setupGameConfiguration } from './gameConfig';
+import {
+  loadAssets,
+  addAssetsToScene,
+  setupPlayer,
+  setupPlatforms,
+  setupStars,
+  setupBombs,
+} from './components/Assets';
+import { setupAnimations } from './components/Animations';
+import { setCursors } from './components/Cursors';
+import {
+  collide,
+  createCursors,
+  overlap
+} from './helpers';
+import { createScore } from './components/Score';
 import './index.css';
-// import App from './App';
-import * as serviceWorker from './serviceWorker';
+
+
+window.scene = {};
+window.Phaser = Phaser;
+const baseURL = 'http://localhost:3000/';
+
+let score = 0;
+let scoreText;
+let gameOver = false;
+let bombs;
+let player;
+let stars;
+
+function spawnBombs(stars, bombs) {
+  if (stars.countActive(true) === 0)
+    {
+        stars.children.iterate(function (child) {
+
+            child.enableBody(true, child.x, 0, true, true);
+
+        });
+
+        var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
+
+        var bomb = bombs.create(x, 16, 'bomb');
+        bomb.setBounce(1);
+        bomb.setCollideWorldBounds(true);
+        bomb.setVelocity(Phaser.Math.Between(-200, 200), 20);
+    }
+}
+
+function collectStar (player, star)
+{
+    star.disableBody(true, true);
+    score += 5;
+    scoreText.setText('Score: ' + score);
+    spawnBombs(stars, bombs);
+}
+
+function hitBomb (player, bomb)
+{
+  const { scene } = window;
+  scene.physics.pause();
+  player.setTint(0xff0000);
+  player.anims.play('turn');
+  gameOver = true;
+}
 
 const App = () => {
-  const config = {
-    type: Phaser.AUTO,
-    width: 800,
-    height: 600,
-    physics: {
-      default: 'arcade',
-      arcade: {
-        gravity: { y: 300 },
-        debug: false,
-      },
-    },
-    scene: {
-      preload: preload,
-      create: create,
-      update: update
-    }
-  };
-
-  const game = new Phaser.Game(config);
+  let platforms, cursors;
+  setupGameConfiguration(preload, create, update);
 
   function preload() {
-    this.load.setBaseURL('http://localhost:3000/');
-    this.load.image('sky', './assets/sky.png');
-    this.load.image('ground', 'assets/platform.png');
-    this.load.image('star', 'assets/star.png');
-    this.load.image('bomb', 'assets/bomb.png');
-    this.load.spritesheet('dude',
-      'assets/dude.png',
-      { frameWidth: 32, frameHeight: 48 }
-    );
+    window.scene = this;
+    this.load.setBaseURL(baseURL);
+    loadAssets();
   }
-
-  var platforms, player, cursors;
 
   function create() {
-    this.add.image(400, 300, 'sky');
-    this.add.image(400, 300, 'star');
+    addAssetsToScene();
+    setupAnimations();
+    platforms = setupPlatforms();
+    player = setupPlayer();
+    stars = setupStars();
+    bombs = setupBombs();
 
-    platforms = this.physics.add.staticGroup();
+    collide(player, platforms);
+    collide(stars, platforms);
+    collide(bombs, platforms);
+    this.physics.add.collider(player, bombs, hitBomb, null, this);
 
-    platforms.create(400, 568, 'ground').setScale(2).refreshBody();
+    overlap(player, stars, collectStar);
 
-    platforms.create(600, 400, 'ground');
-    platforms.create(50, 250, 'ground');
-    platforms.create(750, 220, 'ground');
-
-    player = this.physics.add.sprite(100, 450, 'dude');
-
-    player.setBounce(0.2);
-    player.setCollideWorldBounds(true);
-    player.body.setGravityY(300)
-
-    this.anims.create({
-      key: 'left',
-      frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 3 }),
-      frameRate: 10,
-      repeat: -1
-    });
-
-    this.anims.create({
-      key: 'turn',
-      frames: [{ key: 'dude', frame: 4 }],
-      frameRate: 20
-    });
-
-    this.anims.create({
-      key: 'right',
-      frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }),
-      frameRate: 10,
-      repeat: -1
-    });
-    
-    this.physics.add.collider(player, platforms);
+    scoreText = createScore();
   }
 
-
   function update() {
-    cursors = this.input.keyboard.createCursorKeys();
+    cursors = createCursors();
 
-    if (cursors.left.isDown)
-    {
-        player.setVelocityX(-160);
-
-        player.anims.play('left', true);
-    }
-    else if (cursors.right.isDown)
-    {
-        player.setVelocityX(160);
-
-        player.anims.play('right', true);
-    }
-    else
-    {
-        player.setVelocityX(0);
-
-        player.anims.play('turn');
-    }
-
-    if (cursors.up.isDown && player.body.touching.down)
-    {
-        player.setVelocityY(-330);
-    }
+    setCursors(cursors, player);
   }
 
   return (
@@ -116,8 +107,3 @@ const App = () => {
 }
 
 ReactDOM.render(<App />, document.getElementById('root'));
-
-// If you want your app to work offline and load faster, you can change
-// unregister() to register() below. Note this comes with some pitfalls.
-// Learn more about service workers: https://bit.ly/CRA-PWA
-serviceWorker.unregister();
