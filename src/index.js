@@ -1,65 +1,100 @@
-import React from 'react';
-import ReactDOM from 'react-dom';
-import Phaser from 'phaser';
-import './index.css';
-// import App from './App';
-import * as serviceWorker from './serviceWorker';
+import React from "react";
+import ReactDOM from "react-dom";
+import Phaser from "phaser";
+import { setupGameConfiguration } from "./gameConfig";
+import {
+  loadAssets,
+  addAssetsToScene,
+  setupPlayer,
+  setupPlatforms,
+  setupStars,
+  setupBombs
+} from "./components/Assets";
+import { setupAnimations } from "./components/Animations";
+import { setCursors } from "./components/Cursors";
+import { collide, createCursors, overlap } from "./helpers";
+import { createScore } from "./components/Score";
+import "./index.css";
+
+window.scene = {};
+window.Phaser = Phaser;
+const baseURL = "http://localhost:3000/";
+
+let score = 0;
+let scoreText;
+let gameOver = false;
+let bombs;
+let player;
+let stars;
+
+function spawnBombs(stars, bombs) {
+  if (stars.countActive(true) === 0) {
+    stars.children.iterate(function(child) {
+      child.enableBody(true, child.x, 0, true, true);
+    });
+
+    var x =
+      player.x < 400
+        ? Phaser.Math.Between(400, 800)
+        : Phaser.Math.Between(0, 400);
+
+    var bomb = bombs.create(x, 16, "bomb");
+    bomb.setBounce(1);
+    bomb.setCollideWorldBounds(true);
+    bomb.setVelocity(Phaser.Math.Between(-200, 200), 20);
+  }
+}
+
+function collectStar(player, star) {
+  star.disableBody(true, true);
+  score += 5;
+  scoreText.setText("Score: " + score);
+  spawnBombs(stars, bombs);
+}
+
+function hitBomb(player, bomb) {
+  const { scene } = window;
+  scene.physics.pause();
+  player.setTint(0xff0000);
+  player.anims.play("turn");
+  gameOver = true;
+}
 
 const App = () => {
-  const config = {
-    type: Phaser.AUTO,
-    width: 800,
-    height: 600,
-    physics: {
-      default: 'arcade',
-      arcade: {
-        gravity: { y: 200 }
-      }
-    },
-    scene: {
-      preload: preload,
-      create: create
-    }
-  };
-
-  const game = new Phaser.Game(config);
+  let platforms, cursors;
+  setupGameConfiguration(preload, create, update);
 
   function preload() {
-    this.load.setBaseURL('http://labs.phaser.io');
-
-    this.load.image('sky', 'assets/skies/space3.png');
-    this.load.image('logo', 'assets/sprites/phaser3-logo.png');
-    this.load.image('red', 'assets/particles/red.png');
+    window.scene = this;
+    this.load.setBaseURL(baseURL);
+    loadAssets();
   }
 
   function create() {
-    this.add.image(400, 300, 'sky');
+    addAssetsToScene();
+    setupAnimations();
+    platforms = setupPlatforms();
+    player = setupPlayer();
+    stars = setupStars();
+    bombs = setupBombs();
 
-    var particles = this.add.particles('red');
+    collide(player, platforms);
+    collide(stars, platforms);
+    collide(bombs, platforms);
+    this.physics.add.collider(player, bombs, hitBomb, null, this);
 
-    var emitter = particles.createEmitter({
-      speed: 100,
-      scale: { start: 1, end: 0 },
-      blendMode: 'ADD'
-    });
+    overlap(player, stars, collectStar);
 
-    const logo = this.physics.add.image(400, 100, 'logo');
-
-    logo.setVelocity(100, 200);
-    logo.setBounce(1, 1);
-    logo.setCollideWorldBounds(true);
-
-    emitter.startFollow(logo);
+    scoreText = createScore();
   }
 
-  return (
-  <div />
-  );
-}
+  function update() {
+    cursors = createCursors();
 
-ReactDOM.render(<App />, document.getElementById('root'));
+    setCursors(cursors, player);
+  }
 
-// If you want your app to work offline and load faster, you can change
-// unregister() to register() below. Note this comes with some pitfalls.
-// Learn more about service workers: https://bit.ly/CRA-PWA
-serviceWorker.unregister();
+  return <div />;
+};
+
+ReactDOM.render(<App />, document.getElementById("root"));
